@@ -1,0 +1,71 @@
+# Plex Authentication Technical Documentation
+
+## Authentication Flow
+
+### 1. Initial Authentication
+```mermaid
+sequenceDiagram
+    participant User
+    participant Votarr
+    participant Plex
+    
+    User->>Votarr: Request Login
+    Votarr->>Plex: Request Pin
+    Plex-->>Votarr: Return Pin & Code
+    Votarr->>User: Redirect to Plex Login
+    User->>Plex: Authenticate
+    Plex-->>User: Authorize Application
+    User->>Votarr: Return with Code
+    Votarr->>Plex: Exchange Code for Token
+    Plex-->>Votarr: Return Access Token
+    Votarr->>User: Session Established
+```
+
+### 2. Token Management
+- Access tokens stored in secure HTTP-only cookies
+- Tokens validated against Plex API on each request
+- Automatic token refresh when expired
+- Server-side token cache for performance
+
+### 3. Library Access
+- Libraries scanned on first authentication
+- Metadata cached locally
+- Real-time updates via Plex webhooks
+- Incremental library updates
+
+## Security Considerations
+
+### 1. Token Storage
+```typescript
+interface PlexTokenStore {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: Date;
+  scope: string[];
+}
+```
+
+### 2. Server Validation
+```typescript
+interface PlexServerValidation {
+  serverId: string;
+  accessToken: string;
+  connectionUrl: string;
+  libraries: PlexLibrary[];
+}
+```
+
+### 3. Error Handling
+```typescript
+class PlexAuthError extends Error {
+  constructor(
+    public code: string,
+    public message: string,
+    public plexResponse?: any
+  ) {
+    super(message);
+  }
+}
+```
+
+[Continued with technical specifications...]

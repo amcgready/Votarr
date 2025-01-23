@@ -1,0 +1,305 @@
+# Votarr Deployment and Scaling Guide
+
+## Docker Deployment
+
+### Single Instance Setup
+```dockerfile
+# Dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+
+ENV NODE_ENV=production
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
+```
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  votarr:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://user:pass@db:5432/votarr
+      - REDIS_URL=redis://redis:6379
+      - PLEX_SERVER_URL=http://plex:32400
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./config:/app/config
+      - cache-data:/app/cache
+
+  db:
+    image: postgres:14-alpine
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=votarr
+      - POSTGRES_PASSWORD=secure_password
+      - POSTGRES_DB=votarr
+
+  redis:
+    image: redis:6-alpine
+    volumes:
+      - redis-data:/data
+
+volumes:
+  db-data:
+  redis-data:
+  cache-data:
+```
+
+### Multi-Container Setup
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - votarr
+
+  votarr:
+    image: votarr:latest
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://user:pass@db:5432/votarr
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - db
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: postgres:14-alpine
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=votarr
+      - POSTGRES_PASSWORD=secure_password
+      - POSTGRES_DB=votarr
+
+  redis:
+    image: redis:6-alpine
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  db-data:
+  redis-data:
+```
+
+## Scaling Considerations
+
+### Database Scaling
+```sql
+-- Performance Optimizations
+CREATE INDEX idx_sessions_status ON sessions(status);
+CREATE INDEX idx_votes_session_round ON votes(session_id, round);
+CREATE INDEX idx_media_search ON media USING gin(to_tsvector('english', title || ' ' || description));
+
+-- Partitioning for Large Tables
+CREATE TABLE votes_partitioned (
+    id UUID PRIMARY KEY,
+    session_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    created_at TIMESTAMP NOT NULL
+) PARTITION BY RANGE (created_at);
+
+-- Create Monthly Partitions
+CREATE TABLE votes_y2024m01 PARTITION OF votes_partitioned
+    FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+```
+
+### Caching Strategy
+```typescript
+// Cache Configuration
+const cacheConfig = {
+  layers: {
+    memory: {
+      max: 1000,
+      ttl: 60 * 5 // 5 minutes
+    },
+    redis: {
+      ttl: 60 * 60 // 1 hour
+    }
+  },
+  keys: {
+    session: (id: string) => `session:${id}`,
+    media: (id: string) => `media:${id}`,
+    votes: (sessionId: string, round: number) => 
+      `votes:${sessionId}:${round}`
+  }
+};
+
+// Implement Caching Layers
+class CacheManager {
+  private memoryCache: Map<string, any>;
+  private redisClient: Redis;
+
+  async get(key: string, options?: CacheOptions): Promise<any> {
+    // Check memory cache first
+    const memoryResult = this.memoryCache.get(key);
+    if (memoryResult) return memoryResult;
+
+    // Check Redis cache
+    const redisResult = await this.redisClient.get(key);
+    if (redisResult) {
+      // Populate memory cache
+      this.memoryCache.set(key, redisResult);
+      return redisResult;
+    }
+
+    return null;
+  }
+}
+```
+
+### Load Balancing
+```nginx
+# nginx.conf
+upstream votarr_backend {
+    least_conn; # Least connections algorithm
+    server votarr:3000 max_fails=3 fail_timeout=30s;
+    server votarr:3001 max_fails=3 fail_timeout=30s;
+    server votarr:3002 max_fails=3 fail_timeout=30s;
+}
+
+server {
+    listen 80;
+    server_name votarr.example.com;
+
+    location / {
+        proxy_pass http://votarr_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        
+        # WebSocket support
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Static content caching
+    location /static/ {
+        expires 1h;
+        add_header Cache-Control "public, no-transform";
+    }
+}
+```
+
+### Monitoring Setup
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'votarr'
+    static_configs:
+      - targets: ['localhost:3000']
+    metrics_path: '/metrics'
+
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+
+# Grafana Dashboard Configuration
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Active Sessions",
+      "type": "graph",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "votarr_active_sessions_total"
+        }
+      ]
+    },
+    {
+      "title": "WebSocket Connections",
+      "type": "graph",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "votarr_websocket_connections_total"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Backup Strategy
+```bash
+#!/bin/bash
+# backup.sh
+
+# Database backup
+pg_dump -h localhost -U votarr -d votarr -F c -f "/backups/db_$(date +%Y%m%d).dump"
+
+# Redis backup
+redis-cli save
+cp /var/lib/redis/dump.rdb "/backups/redis_$(date +%Y%m%d).rdb"
+
+# Configuration backup
+tar -czf "/backups/config_$(date +%Y

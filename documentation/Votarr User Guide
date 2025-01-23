@@ -1,0 +1,166 @@
+# Votarr User Guide
+
+## Introduction
+Votarr is a self-hosted platform that helps groups decide what to watch together from their Plex libraries. Using a structured voting system, participants can suggest and vote on movies or TV shows from their connected Plex libraries, making group movie selection fun and democratic.
+
+## Getting Started
+
+### 1. Authentication
+Votarr uses Plex for authentication - there is no separate account creation needed.
+1. On the Votarr login screen, click "Sign in with Plex"
+2. You'll be redirected to Plex's authentication page
+3. Sign in with your Plex credentials
+4. Authorize Votarr to access your Plex account
+   - This allows Votarr to see your Plex libraries
+   - Votarr will use your Plex username to identify you
+
+### 2. Initial Setup
+After first login:
+- Votarr automatically connects to your Plex server
+- Your available libraries are scanned and indexed
+- You can select which libraries to include in voting sessions
+
+### 3. User Interface Overview
+- **Home Dashboard**: View active sessions and recent activity
+- **Libraries**: Browse connected Plex libraries
+- **Sessions**: Create or join voting sessions
+- **Settings**: Configure Plex connection and preferences
+
+## Creating a Session
+
+### Step 1: Session Setup
+1. Click "New Session" button
+2. Configure session settings:
+   - Session name
+   - Number of voting rounds
+   - Select which Plex libraries to include
+   - Optional: Time limit per round
+
+### Step 2: Invite Participants
+1. Click "Invite" in the session panel
+2. Share the generated session link
+3. Participants will need to authenticate with their Plex accounts to join
+   - Each participant can vote on media from the host's selected libraries
+
+### Step 3: Managing the Session
+As a session owner, you can:
+- Start/end voting rounds
+- Remove participants
+- Cancel the session
+- View voting statistics
+- Control which libraries are included
+
+## Participating in a Session
+
+### 1. Joining a Session
+- Click the session link shared by the host
+- Authenticate with your Plex account if not already logged in
+- You'll join the session automatically after authentication
+
+### 2. Voting Process
+1. Browse available media from the host's libraries
+2. For each item:
+   - Upvote (👍) if interested
+   - Downvote (👎) if not interested
+   - Skip if unsure
+3. View current voting results in real-time
+
+### 3. Results and Selection
+- Final selection revealed after all rounds
+- View detailed voting breakdown
+- Selected media can be played directly in Plex
+
+## Features
+
+### Media Management
+- **Browse**: Scroll through available movies/shows from the host's Plex libraries
+- **Search**: Find specific titles within available libraries
+- **Filter**: Sort by genre, year, duration
+- **Details**: View media information pulled directly from Plex
+
+### Voting System
+- **Multiple Rounds**: Narrow down choices progressively
+- **Real-time Updates**: See votes as they happen
+- **Fair Distribution**: Equal voting weight per participant
+- **Anonymous Voting**: Privacy in voting choices
+
+### Session Types
+1. **Quick Pick**: Single round, fast decision
+2. **Standard**: Multiple rounds, thorough selection
+3. **Marathon**: Select multiple titles for a watch list
+
+### Notifications
+- Session invites
+- Round start/end
+- Final selection
+- Participant updates
+
+## Best Practices
+
+### For Session Hosts
+1. Set clear session rules
+2. Ensure selected libraries are properly updated in Plex
+3. Allow adequate voting time
+4. Monitor session progress
+
+### For Participants
+1. Vote promptly when rounds begin
+2. Consider others' preferences
+3. Use chat for discussion
+4. Ensure stable connection to host
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Can't Connect to Plex**
+   - Verify your Plex server is online and accessible
+   - Check Plex authentication status
+   - Ensure Votarr has proper permissions to access your Plex server
+   - Try re-authenticating with Plex
+
+2. **Session Issues**
+   - Ensure stable internet connection
+   - Verify host's Plex server is accessible
+   - Refresh browser if UI freezes
+   - Check if session is still active
+
+3. **Media Not Showing**
+   - Verify the host's Plex libraries are properly shared
+   - Check if media type is supported
+   - Ensure Plex metadata is properly synced
+
+4. **Voting Problems**
+   - Verify round is active
+   - Check if already voted
+   - Confirm participant status
+
+### Getting Help
+- Check server logs
+- Consult Votarr's GitHub issues
+- Review configuration settings
+- Verify Plex server status
+
+## Technical Considerations
+- Votarr requires a stable connection to the Plex server
+- Media information is cached locally for performance
+- Real-time updates use WebSocket connections
+- Session data is stored in the local database
+
+## Performance Tips
+- Regularly update Plex libraries
+- Clean up old sessions
+- Monitor server resources
+- Keep Plex metadata updated
+
+## Privacy and Security
+- Authentication handled through Plex
+- No passwords stored locally
+- Session data is isolated
+- Optional private session mode
+
+## Additional Resources
+- Installation guide
+- Configuration documentation
+- API documentation (for developers)
+- GitHub repository

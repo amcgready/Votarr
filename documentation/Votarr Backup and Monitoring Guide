@@ -1,0 +1,336 @@
+# Votarr Backup and Monitoring Guide
+
+## Backup Strategy
+
+### 1. Database Backups
+```bash
+#!/bin/bash
+# backup-db.sh
+
+# Configuration
+BACKUP_DIR="/var/backups/votarr/database"
+RETENTION_DAYS=30
+DB_NAME="votarr"
+DB_USER="votarr"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Create backup directory structure
+mkdir -p "${BACKUP_DIR}/daily"
+mkdir -p "${BACKUP_DIR}/weekly"
+mkdir -p "${BACKUP_DIR}/monthly"
+
+# Daily backup with schema and data
+pg_dump -U ${DB_USER} -d ${DB_NAME} -F custom \
+  -f "${BACKUP_DIR}/daily/votarr_${TIMESTAMP}.dump"
+
+# Weekly backup (if today is Sunday)
+if [ $(date +%u) -eq 7 ]; then
+  cp "${BACKUP_DIR}/daily/votarr_${TIMESTAMP}.dump" \
+     "${BACKUP_DIR}/weekly/votarr_week_$(date +%V).dump"
+fi
+
+# Monthly backup (if today is the 1st)
+if [ $(date +%d) -eq 01 ]; then
+  cp "${BACKUP_DIR}/daily/votarr_${TIMESTAMP}.dump" \
+     "${BACKUP_DIR}/monthly/votarr_$(date +%Y%m).dump"
+fi
+
+# Cleanup old backups
+find "${BACKUP_DIR}/daily" -type f -mtime +${RETENTION_DAYS} -delete
+find "${BACKUP_DIR}/weekly" -type f -mtime +90 -delete
+find "${BACKUP_DIR}/monthly" -type f -mtime +365 -delete
+
+# Verify backup
+pg_restore --list "${BACKUP_DIR}/daily/votarr_${TIMESTAMP}.dump" > /dev/null
+if [ $? -eq 0 ]; then
+    echo "Backup successful: votarr_${TIMESTAMP}.dump"
+else
+    echo "Backup verification failed!"
+    exit 1
+fi
+```
+
+### 2. Redis State Backup
+```bash
+#!/bin/bash
+# backup-redis.sh
+
+BACKUP_DIR="/var/backups/votarr/redis"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Trigger RDB save
+redis-cli SAVE
+
+# Copy RDB file
+cp /var/lib/redis/dump.rdb "${BACKUP_DIR}/redis_${TIMESTAMP}.rdb"
+
+# Compress backup
+gzip "${BACKUP_DIR}/redis_${TIMESTAMP}.rdb"
+
+# Keep only last 7 days of Redis backups
+find ${BACKUP_DIR} -name "redis_*.rdb.gz" -mtime +7 -delete
+```
+
+### 3. Configuration Backup
+```bash
+#!/bin/bash
+# backup-config.sh
+
+BACKUP_DIR="/var/backups/votarr/config"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+CONFIG_DIRS=(
+    "/etc/votarr"
+    "/opt/votarr/config"
+    "/opt/votarr/.env"
+)
+
+# Create tar archive of all config directories
+tar czf "${BACKUP_DIR}/config_${TIMESTAMP}.tar.gz" ${CONFIG_DIRS[@]}
+
+# Encrypt backup
+gpg --encrypt --recipient admin@votarr \
+    "${BACKUP_DIR}/config_${TIMESTAMP}.tar.gz"
+
+# Remove unencrypted archive
+rm "${BACKUP_DIR}/config_${TIMESTAMP}.tar.gz"
+```
+
+## Monitoring Setup
+
+### 1. Application Metrics
+
+#### Prometheus Configuration
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'votarr'
+    static_configs:
+      - targets: ['localhost:3000']
+    metrics_path: '/metrics'
+    scheme: 'http'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'votarr_.*'
+        action: 'keep'
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+```
+
+#### Custom Metrics
+```typescript
+// metrics.ts
+import { Registry, Counter, Gauge, Histogram } from 'prom-client';
+
+export const metrics = {
+  activeUsers: new Gauge({
+    name: 'votarr_active_users',
+    help: 'Number of currently active users'
+  }),
+
+  sessionDuration: new Histogram({
+    name: 'votarr_session_duration_seconds',
+    help: 'Duration of voting sessions',
+    buckets: [60, 300, 600, 1800, 3600]
+  }),
+
+  votesTotal: new Counter({
+    name: 'votarr_votes_total',
+    help: 'Total number of votes cast',
+    labelNames: ['vote_type']
+  }),
+
+  plexRequests: new Counter({
+    name: 'votarr_plex_requests_total',
+    help: 'Total Plex API requests',
+    labelNames: ['endpoint', 'status']
+  }),
+
+  mediaScanned: new Counter({
+    name: 'votarr_media_scanned_total',
+    help: 'Total media items scanned',
+    labelNames: ['library_type']
+  })
+};
+```
+
+### 2. Health Checks
+
+```typescript
+// healthcheck.ts
+interface HealthCheck {
+  service: string;
+  status: 'up' | 'down';
+  latency: number;
+  lastChecked: Date;
+  details?: Record<string, any>;
+}
+
+async function performHealthCheck(): Promise<HealthCheck[]> {
+  return [
+    await checkDatabase(),
+    await checkRedis(),
+    await checkPlexConnection(),
+    await checkWebSocket(),
+    await checkFileSystem()
+  ];
+}
+
+async function checkDatabase(): Promise<HealthCheck> {
+  const startTime = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return {
+      service: 'database',
+      status: 'up',
+      latency: Date.now() - startTime,
+      lastChecked: new Date()
+    };
+  } catch (error) {
+    return {
+      service: 'database',
+      status: 'down',
+      latency: Date.now() - startTime,
+      lastChecked: new Date(),
+      details: { error: error.message }
+    };
+  }
+}
+```
+
+### 3. Grafana Dashboards
+
+```json
+{
+  "dashboard": {
+    "id": null,
+    "title": "Votarr Overview",
+    "tags": ["votarr"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Active Sessions",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "votarr_active_sessions"
+          }
+        ],
+        "alert": {
+          "name": "High Session Count",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [50],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ]
+        }
+      },
+      {
+        "title": "Vote Distribution",
+        "type": "piechart",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "sum by (vote_type) (votarr_votes_total)"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 4. Alert Configuration
+
+```yaml
+# alertmanager.yml
+global:
+  resolve_timeout: 5m
+  slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+
+route:
+  receiver: 'slack-notifications'
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  group_by: ['alertname', 'cluster', 'service']
+
+receivers:
+- name: 'slack-notifications'
+  slack_configs:
+  - channel: '#votarr-alerts'
+    send_resolved: true
+    title: '{{ template "slack.default.title" . }}'
+    text: '{{ template "slack.default.text" . }}'
+
+templates:
+- '/etc/alertmanager/template/*.tmpl'
+```
+
+### 5. Logging Configuration
+
+```typescript
+// logger.ts
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'votarr' },
+  transports: [
+    new winston.transports.File({
+      filename: 'error.log',
+      level: 'error',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+    new winston.transports.File({
+      filename: 'combined.log',
+      maxsize: 5242880,
+      maxFiles: 5,
+    })
+  ]
+});
+
+// Structured logging for important events
+interface LogEvent {
+  category: 'session' | 'vote' | 'plex' | 'auth';
+  action: string;
+  userId?: string;
+  sessionId?: string;
+  metadata?: Record<string, any>;
+}
+
+export function logEvent(event: LogEvent): void {
+  logger.info('Event occurred', { ...event });
+}
+```
+
+Would you like me to continue with:
+1. Application performance monitoring setup?
+2. Detailed error tracking configuration?
+3. User activity monitoring?
+4. System resource monitoring?

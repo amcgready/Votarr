@@ -1,0 +1,51 @@
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  plexId        String    @unique
+  email         String    @unique
+  username      String
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[] @relation("SessionParticipants")
+  ownedSessions Session[] @relation("SessionOwner")
+  votes         Vote[]
+}
+
+model Session {
+  id          String    @id @default(uuid())
+  name        String
+  ownerId     String
+  owner       User      @relation("SessionOwner", fields: [ownerId], references: [id])
+  status      String    @default("PENDING") // PENDING, ACTIVE, COMPLETED
+  participants User[]   @relation("SessionParticipants")
+  votes       Vote[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  endedAt     DateTime?
+  mediaType   String    // MOVIE, SHOW
+  maxVotes    Int      @default(3)
+  mediaPool   Json[]    // Array of Plex media items
+  winningMedia Json?    // Selected media item
+}
+
+model Vote {
+  id        String   @id @default(uuid())
+  sessionId String
+  userId    String
+  mediaId   String   // Plex media ID
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  session   Session  @relation(fields: [sessionId], references: [id])
+
+  @@unique([sessionId, userId, mediaId])
+}

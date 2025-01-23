@@ -1,0 +1,12 @@
+# Ignore environment file
+.env
+
+# Ignore Logs directory
+Logs/
+
+# Ignore test-results directory
+test-results/
+
+# Ignore Docker Compose file
+docker-compose.yml
+

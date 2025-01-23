@@ -1,0 +1,47 @@
+You can run all tests using Vitest commands. Here are the different ways to run the tests:
+
+1. Run all tests:
+```bash
+npm test
+```
+or
+```bash
+yarn test
+```
+
+2. Run tests with UI interface:
+```bash
+npm run test:ui
+```
+or
+```bash
+yarn test:ui
+```
+
+3. Run tests with coverage report:
+```bash
+npm run test:coverage
+```
+or
+```bash
+yarn test:coverage
+```
+
+4. Run tests in watch mode (automatically reruns when files change):
+```bash
+npm run test:watch
+```
+or
+```bash
+yarn test:watch
+```
+
+The coverage report will show:
+- Lines of code covered
+- Functions tested
+- Branches covered
+- Statements covered
+
+This will help identify any gaps in testing.
+
+Would you like me to show you how to interpret the test results or how to debug any failing tests?

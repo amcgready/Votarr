@@ -1,0 +1,36 @@
+# .github/workflows/environments.yml
+name: Environment Configuration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to configure'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  configure-environment:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Configure Environment Secrets
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+            secret/data/votarr/${{ github.event.inputs.environment }}/aws AWS_ACCESS_KEY_ID ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/aws AWS_SECRET_ACCESS_KEY ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/aws AWS_REGION ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/database DATABASE_URL ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/plex PLEX_CLIENT_IDENTIFIER ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/jwt JWT_SECRET ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/monitoring SENTRY_DSN ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/monitoring LOGTAIL_SOURCE_TOKEN ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/aws AWS_S3_BUCKET ;
+            secret/data/votarr/${{ github.event.inputs.environment }}/aws AWS_CLOUDFRONT_ID ;

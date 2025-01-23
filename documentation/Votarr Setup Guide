@@ -1,0 +1,76 @@
+# Votarr Setup Guide
+
+## Prerequisites
+- Node.js (v18 or higher)
+- PostgreSQL (v14 or higher)
+- Redis (v6 or higher)
+- Plex Media Server (v1.25 or higher)
+- Plex server with direct access or public URL
+
+## Plex Configuration
+
+### 1. Create Plex Application
+```bash
+# Register your application at:
+https://plex.tv/api/v2/applications
+
+# Required information:
+- Application name: Votarr
+- Redirect URIs: https://your-server/auth/plex/callback
+- Product: Votarr
+- Device: Server
+```
+
+### 2. Configure Plex Permissions
+1. Enable remote access on your Plex server (if needed)
+2. Configure library sharing settings
+3. Note down your Plex server's:
+   - URL/IP address
+   - Port number
+   - Library section IDs
+
+### 3. Get Plex Authentication Keys
+```bash
+# Get your Plex client identifier
+curl -X POST \
+  'https://plex.tv/api/v2/pins' \
+  -H 'X-Plex-Client-Identifier: your-client-id' \
+  -H 'X-Plex-Product: Votarr'
+
+# Save the received credentials for configuration
+```
+
+## Local Development Setup
+
+### 1. Clone and Install
+```bash
+git clone https://github.com/your-org/votarr.git
+cd votarr
+npm install
+```
+
+### 2. Environment Configuration
+Create a `.env` file:
+```env
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# Database Configuration
+DATABASE_URL="postgresql://user:password@localhost:5432/votarr"
+
+# Plex Configuration
+PLEX_CLIENT_IDENTIFIER="your-plex-client-id"
+PLEX_APPLICATION_TOKEN="your-plex-app-token"
+PLEX_SERVER_URL="http://your-plex-server:32400"
+PLEX_SERVER_TOKEN="your-plex-server-token"
+
+# Redis Configuration
+REDIS_URL="redis://localhost:6379"
+
+# Security
+SESSION_SECRET="your-session-secret"
+CORS_ORIGINS="http://localhost:3000"
+```
+
+[Rest of setup remains similar, with focus on Plex configuration...]

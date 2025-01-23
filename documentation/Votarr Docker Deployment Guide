@@ -1,0 +1,119 @@
+# Votarr Docker Deployment Guide
+
+This guide will walk you through the steps to deploy the Votarr application using Docker and Docker Compose.
+
+## Prerequisites
+- Docker installed on your machine
+- Docker Compose installed (typically comes bundled with Docker)
+
+## Deployment Steps
+
+1. **Clone the Votarr repository**:
+   ```
+   git clone https://github.com/your-username/votarr.git
+   cd votarr
+   ```
+
+2. **Create the Dockerfiles**:
+   - In the project root directory, create a file named `Dockerfile.api` with the following contents:
+     ```Dockerfile
+     # Dockerfile.api
+     FROM node:14
+     WORKDIR /app
+     COPY package.json yarn.lock ./
+     RUN yarn install
+     COPY . .
+     RUN yarn build
+     CMD ["yarn", "start:api"]
+     ```
+   - Create another file named `Dockerfile.web` with the following contents:
+     ```Dockerfile
+     # Dockerfile.web
+     FROM node:14 as build
+     WORKDIR /app
+     COPY package.json yarn.lock ./
+     RUN yarn install
+     COPY . .
+     RUN yarn build
+
+     FROM nginx:1.19
+     COPY --from=build /app/dist /usr/share/nginx/html
+     EXPOSE 80
+     CMD ["nginx", "-g", "daemon off;"]
+     ```
+
+3. **Create the Docker Compose configuration**:
+   - In the project root directory, create a file named `docker-compose.yml` with the following contents:
+     ```yaml
+     version: '3'
+
+     services:
+       db:
+         image: postgres:12
+         environment:
+           - POSTGRES_DB=votarr
+           - POSTGRES_USER=votarr
+           - POSTGRES_PASSWORD=votarr_password
+         volumes:
+           - db-data:/var/lib/postgresql/data
+
+       api:
+         build:
+           context: .
+           dockerfile: Dockerfile.api
+         environment:
+           - DATABASE_URL=postgresql://votarr:votarr_password@db/votarr
+           - JWT_SECRET=your_secret_key
+         ports:
+           - 4000:4000
+         depends_on:
+           - db
+
+       web:
+         build:
+           context: .
+           dockerfile: Dockerfile.web
+         environment:
+           - VITE_API_URL=http://localhost:4000/api
+         ports:
+           - 3000:80
+         depends_on:
+           - api
+
+     volumes:
+       db-data:
+     ```
+
+4. **Build and start the application**:
+   ```
+   docker-compose up -d
+   ```
+
+   This will build the Docker images and start the containers in the background.
+
+5. **Access the application**:
+   You can now access the Votarr application in your web browser at `http://localhost:3000`.
+
+## Updating the Application
+
+To update the Votarr application, follow these steps:
+
+1. Pull the latest changes from the Git repository:
+   ```
+   git pull
+   ```
+2. Rebuild the Docker images:
+   ```
+   docker-compose build
+   ```
+3. Restart the containers:
+   ```
+   docker-compose up -d
+   ```
+
+The application should now be updated with the latest changes.
+
+## Troubleshooting
+
+- If you encounter any issues with the database connection, make sure the `DATABASE_URL` environment variable in the `docker-compose.yml` file is correct.
+- If you have any other questions or run into problems, refer to the [Votarr Technical Documentation](./technical-documentation.md) or reach out to the development team.

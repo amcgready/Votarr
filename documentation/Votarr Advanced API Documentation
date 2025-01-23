@@ -1,0 +1,269 @@
+# Votarr Advanced API Guide
+
+## Advanced Query Parameters
+
+### Media Endpoints
+
+#### Library Content Filtering
+```http
+GET /libraries/{libraryId}/contents
+
+Query Parameters:
+?filter[year]=2020-2024           # Year range
+?filter[genre]=Action,Comedy      # Multiple genres
+?filter[duration]=60-180          # Duration in minutes
+?filter[rating]=7.5               # Minimum rating
+?filter[unwatched]=true          # Only unwatched content
+?filter[resolution]=1080p,4k      # Specific resolutions
+?sort=year&order=desc            # Sorting options
+?page=1&limit=25                 # Pagination
+
+Example:
+/libraries/1/contents?filter[year]=2020-2024&filter[genre]=Action&sort=rating&order=desc&page=1&limit=25
+```
+
+#### Search Parameters
+```http
+GET /media/search
+
+Advanced Search Parameters:
+?q=marvel                        # Basic search term
+?type=movie,show                 # Content types
+?field=title,description        # Search specific fields
+?exact=true                     # Exact match
+?include=cast,crew              # Include additional data
+?language=en,jp                 # Filter by audio language
+?subtitle=en,es                 # Filter by subtitle availability
+
+Example:
+/media/search?q=marvel&type=movie&include=cast&language=en&subtitle=en
+```
+
+### Session Management
+
+#### Session Filtering
+```http
+GET /sessions
+
+Query Parameters:
+?status=active,waiting          # Session status
+?participant=user123           # Filter by participant
+?library=1,2                   # Filter by included libraries
+?created=2024-01-01           # Filter by creation date
+?rounds=5                     # Filter by number of rounds
+?complete=true               # Show only completed sessions
+
+Example:
+/sessions?status=active&participant=user123&library=1
+```
+
+#### Vote Analysis
+```http
+GET /sessions/{sessionId}/votes
+
+Analysis Parameters:
+?round=1,2,3                   # Specific rounds
+?type=upvote,downvote         # Vote types
+?user=user123                 # Filter by user
+?media=movie123              # Filter by media
+?timeframe=1h                # Time-based analysis
+?aggregate=true             # Include vote aggregations
+
+Example:
+/sessions/abc123/votes?round=1&type=upvote&aggregate=true
+```
+
+## Performance Optimization
+
+### Caching Strategy
+
+#### Media Cache
+```typescript
+interface MediaCacheConfig {
+  duration: {
+    metadata: 3600,        // 1 hour
+    thumbnails: 86400,     // 24 hours
+    searchResults: 300     // 5 minutes
+  },
+  invalidation: {
+    onUpdate: ['metadata'],
+    onVote: ['popularity'],
+    onSession: ['recommendations']
+  }
+}
+```
+
+#### Response Headers
+```http
+Cache-Control: private, max-age=3600
+ETag: "33a64df551425fcc55e4d42a148795d9f25f89d4"
+Vary: Accept-Encoding, X-User-ID
+```
+
+### Rate Limiting Headers
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1640995200
+
+Example Response (429 Too Many Requests):
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Rate limit exceeded. Try again in 35 seconds",
+    "resetAt": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+### Pagination Implementation
+```typescript
+interface PaginatedResponse<T> {
+  items: T[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    itemsPerPage: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+    links: {
+      first: string;
+      prev?: string;
+      next?: string;
+      last: string;
+    }
+  }
+}
+
+// Example Response:
+{
+  "items": [...],
+  "pagination": {
+    "currentPage": 2,
+    "totalPages": 5,
+    "totalItems": 100,
+    "itemsPerPage": 20,
+    "hasNext": true,
+    "hasPrevious": true,
+    "links": {
+      "first": "/api/v1/media?page=1",
+      "prev": "/api/v1/media?page=1",
+      "next": "/api/v1/media?page=3",
+      "last": "/api/v1/media?page=5"
+    }
+  }
+}
+```
+
+### WebSocket Optimization
+
+#### Event Batching
+```typescript
+interface BatchedEvent {
+  type: 'BATCHED_EVENTS';
+  timestamp: number;
+  events: WebSocketMessage[];
+  metadata: {
+    batchId: string;
+    totalEvents: number;
+    compression?: 'gzip' | 'none';
+  }
+}
+```
+
+#### Connection Management
+```typescript
+interface WebSocketConfig {
+  heartbeat: {
+    interval: 30000,      // 30 seconds
+    timeout: 5000        // 5 seconds
+  },
+  reconnection: {
+    attempts: 5,
+    backoff: {
+      initial: 1000,     // 1 second
+      multiplier: 1.5,
+      maxDelay: 30000   // 30 seconds
+    }
+  },
+  compression: {
+    enabled: true,
+    threshold: 1024     // bytes
+  }
+}
+```
+
+## Error Handling
+
+### Detailed Error Responses
+```typescript
+interface ErrorResponse {
+  error: {
+    code: string;
+    message: string;
+    details?: Record<string, any>;
+    help?: string;
+    requestId?: string;
+    timestamp: string;
+  };
+  metadata?: {
+    trace?: string;
+    component?: string;
+    severity: 'ERROR' | 'WARNING' | 'INFO';
+  }
+}
+
+// Example Response:
+{
+  "error": {
+    "code": "MEDIA_NOT_FOUND",
+    "message": "The requested media is not available in the Plex library",
+    "details": {
+      "mediaId": "movie123",
+      "libraryId": "lib1"
+    },
+    "help": "Ensure the media exists in the specified Plex library and the library is properly shared",
+    "requestId": "req_abc123",
+    "timestamp": "2024-01-01T12:00:00Z"
+  },
+  "metadata": {
+    "component": "PlexService",
+    "severity": "ERROR"
+  }
+}
+```
+
+### Validation Errors
+```typescript
+interface ValidationError {
+  error: {
+    code: 'VALIDATION_ERROR';
+    message: string;
+    fields: {
+      [field: string]: {
+        code: string;
+        message: string;
+        value?: any;
+        constraints?: string[];
+      }
+    }
+  }
+}
+
+// Example Response:
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request parameters",
+    "fields": {
+      "maxRounds": {
+        "code": "RANGE_ERROR",
+        "message": "maxRounds must be between 1 and 10",
+        "value": 15,
+        "constraints": ["min:1", "max:10"]
+      }
+    }
+  }
+}
+```

@@ -1,0 +1,169 @@
+# Votarr API Documentation
+
+## Overview
+The Votarr API provides endpoints for managing movie voting sessions, Plex authentication, media management, and real-time updates through WebSocket connections.
+
+## Base URL
+```
+Self-hosted URL: http(s)://your-server/api/v1
+```
+
+## Authentication
+All API requests (except Plex authentication endpoint) require a Bearer token received after Plex authentication:
+```http
+Authorization: Bearer <your_access_token>
+```
+
+### Plex Authentication Flow
+
+#### Initialize Plex Authentication
+```http
+GET /auth/plex/init
+
+Response 200:
+{
+  "authUrl": "string",  // Plex authentication URL
+  "pinId": "string"     // Temporary PIN for auth flow
+}
+```
+
+#### Authenticate with Plex
+```http
+POST /auth/plex/token
+Content-Type: application/json
+
+{
+  "pinId": "string",    // PIN from init step
+  "plexToken": "string" // Token received from Plex
+}
+
+Response 200:
+{
+  "accessToken": "string",
+  "user": {
+    "id": "string",
+    "plexUsername": "string",
+    "plexId": "string",
+    "servers": [{
+      "id": "string",
+      "name": "string",
+      "address": "string"
+    }]
+  }
+}
+```
+
+#### Validate Token
+```http
+GET /auth/validate
+
+Response 200:
+{
+  "valid": boolean,
+  "user": {
+    "plexUsername": "string",
+    "plexId": "string"
+  }
+}
+```
+
+### Library Endpoints
+
+#### Get Plex Libraries
+```http
+GET /libraries
+
+Response 200:
+{
+  "libraries": [{
+    "id": "string",
+    "name": "string",
+    "type": "movie" | "show",
+    "count": number,
+    "agent": "string"
+  }]
+}
+```
+
+#### Get Library Contents
+```http
+GET /libraries/{libraryId}/contents
+Query Parameters:
+- page: number
+- limit: number
+- sort: "title" | "year" | "addedAt"
+- filter: "unwatched" | "recent"
+
+Response 200:
+{
+  "items": [{
+    "id": "string",
+    "title": "string",
+    "year": number,
+    "type": "movie" | "show",
+    "thumbnailUrl": "string",
+    "plexRatingKey": "string",
+    "addedAt": "string",
+    "duration": number
+  }],
+  "total": number,
+  "pageSize": number,
+  "currentPage": number
+}
+```
+
+[Previous API endpoints for sessions and voting remain the same...]
+
+### WebSocket Events
+
+Connect to WebSocket:
+```javascript
+ws://your-server/ws?token=<access_token>
+```
+
+#### Additional Plex-Specific Events
+```typescript
+// Library Update
+{
+  type: "LIBRARY_UPDATE",
+  libraryId: string,
+  data: {
+    updated: number,
+    added: number,
+    removed: number
+  }
+}
+
+// Server Status
+{
+  type: "PLEX_SERVER_STATUS",
+  serverId: string,
+  status: "online" | "offline"
+}
+```
+
+## Error Handling
+Plex-specific error codes:
+- 401: Plex Authentication Failed
+- 403: Plex Server Access Denied
+- 404: Plex Resource Not Found
+- 502: Plex Server Unreachable
+
+Error Response Format:
+```json
+{
+  "error": {
+    "code": "string",
+    "message": "string",
+    "plexError?: {
+      "code": "string",
+      "serverMessage": "string"
+    }
+  }
+}
+```
+
+## Rate Limiting
+- Standard endpoints: 100 requests per 15-minute window per IP
+- Plex library scanning: 1 request per 15 minutes
+- WebSocket connections limited to 1 per authenticated user
