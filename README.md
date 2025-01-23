@@ -1,8 +1,6 @@
-# React + Vite
+# Votarr
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# Votarr is in active development, this version is not complete and has many bugs that need to be patched
 
-Currently, two official plugins are available:
+Votarr aims to be a new addition to add on to the aars programs. Votarr allows a user to login via Plex, create a session, and allow multiple users to vote on what to watch. Votarr utilizes what is currently in your Plex library to offer suggestions. Voting is broken into multiple rounds. Some random suggestions are added to the vote to try and remove some user bias.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
